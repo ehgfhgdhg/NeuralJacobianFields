@@ -19,7 +19,7 @@ import torch
 import PerCentroidBatchMaker
 import time
 import pytorch_lightning as pl
-from pytorch_lightning.utilities.seed import seed_everything
+from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks import LearningRateMonitor
 
@@ -566,7 +566,7 @@ class MyNet(pl.LightningModule):
         self.__test_stats.dump(os.path.join(self.logger.log_dir, 'teststats'))
         return loss
 
-    def validation_epoch_end(self, losses):
+    def on_validation_epoch_end(self):
         self.val_step_iter = 0
         self.log_validate = True
 
@@ -655,9 +655,9 @@ def custom_collate(data):
 def load_network_from_checkpoint(gen, args=None, cpuonly = False):
     if cpuonly:
         map_location={'cuda:0':'cpu'}
-        model = MyNet.load_from_checkpoint(checkpoint_path=gen, map_location=map_location)
+        model = MyNet.load_from_checkpoint(checkpoint_path=gen, map_location=map_location, weights_only=False)
     else:
-        model = MyNet.load_from_checkpoint(checkpoint_path=gen)
+        model = MyNet.load_from_checkpoint(checkpoint_path=gen, weights_only=False)
     if args is None:
         args = model.args
     # model.eval()
@@ -746,7 +746,7 @@ def main(gen, log_dir_name, args):
     checkpoint_callback = ModelCheckpoint(every_n_train_steps=500)
     lr_monitor = LearningRateMonitor(logging_interval='step')
     ################################ TRAINER #############################
-    trainer = pl.Trainer(gpus=args.n_gpu, precision=args.precision, log_every_n_steps=200, 
+    trainer = pl.Trainer(accelerator="gpu" if args.n_gpu != 0 else "cpu", devices=args.n_gpu, precision=args.precision, log_every_n_steps=200, 
                          max_epochs=10000, sync_batchnorm=args.n_gpu != 1,
                          val_check_interval=(1.0 if args.no_validation else args.val_interval), logger=logger,
                          plugins=None,
@@ -756,18 +756,18 @@ def main(gen, log_dir_name, args):
                          enable_progress_bar=True,
                          num_nodes=1,
                          deterministic= args.deterministic,
-                         strategy='ddp',
+                         strategy='auto',
                          callbacks=[checkpoint_callback,lr_monitor])  # , callbacks = [lr_monitor])#,auto_lr_find=True)#,max_steps = 5,strategy="ddp")#,accumulate_grad_batches=1
     ################################ TRAINER #############################
 
-    if trainer.precision == 16:
+    if trainer.precision == '16-true':
         use_dtype = torch.half
-    elif trainer.precision == 32:
+    elif trainer.precision == '32-true':
         use_dtype = torch.float
-    elif trainer.precision == 64:
+    elif trainer.precision == '64-true':
         use_dtype = torch.double
     else:
-        raise Exception("trainer's precision is unexpected value")
+        raise Exception(f"trainer's precision is unexpected value {type(trainer.precision)} {trainer.precision}")
 
     print(len(train_pairs))
     train_dataset = DeformationDataset(train_pairs, gen.get_keys_to_load(True),
@@ -799,7 +799,7 @@ def main(gen, log_dir_name, args):
     # 	trainstep = r_finder.suggestion()
     # training
     # ================ #
-    # trainer = pl.Trainer(gpus=1, precision=16, log_every_n_steps=3, deterministic=False,max_epochs=1000,max_steps = 5, profiler="advanced")#,accumulate_grad_batches=1)
+    # trainer = pl.Trainer(accelerator="gpu", devices=1, precision=16, log_every_n_steps=3, deterministic=False,max_epochs=1000,max_steps = 5, profiler="advanced")#,accumulate_grad_batches=1)
     model.lr = args.lr
     # trainer.tune(model)
     if args.overfit_one_batch:
@@ -821,7 +821,7 @@ def main(gen, log_dir_name, args):
         train_loader = DataLoader(local_dataset, batch_size=1, collate_fn=custom_collate, pin_memory=(args.unpin_memory is None),
                                   num_workers=0)
 
-        trainer = pl.Trainer(gpus=1, precision=32, max_epochs=10000,
+        trainer = pl.Trainer(accelerator="gpu", devices=1, precision=32, max_epochs=10000,
                              overfit_batches=1)  # ,  callbacks=[ModelSummary(max_depth=-1)])#,max_steps = 5,strategy="ddp")#,accumulate_grad_batches=1)
         trainer.fit(model, train_loader)
         return

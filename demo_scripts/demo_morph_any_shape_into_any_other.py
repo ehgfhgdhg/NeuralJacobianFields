@@ -87,7 +87,8 @@ class PolyScope(object):
                 self.translations.append(mesh[0].mean(0, keepdims=True))
                 vert -= mesh[0].mean(0, keepdims=True)
                 # vert = vert - torch.from_numpy(vert).mean(0).numpy()
-                igl.write_obj(self.target_name[indes], vert, mesh[1] )
+                print(f"Writing object to {self.target_name[indes]}")
+                igl.write_triangle_mesh(self.target_name[indes], vert, mesh[1] )
 
     def run(self):
         if IMPORT_PS:
@@ -153,7 +154,9 @@ class PolyScope(object):
                 ps.screenshot((result_dir/f"renderings/{name_source}_{name_target}.png").as_posix())
 
             if self.save_obj_to_disk:
-                igl.write_obj((result_dir/"./objs"/f"{name_source}_{name_target}.obj").as_posix(), batch_of_maps_list[0] , self.template[1])
+                op = (result_dir/"./objs"/f"{name_source}_{name_target}.obj").as_posix()
+                print(f"Writing object to {op}")
+                igl.write_triangle_mesh(op, batch_of_maps_list[0] , self.template[1])
 
                 scale = np.sqrt(self.scales[i] / trimesh.Trimesh(batch_of_maps_list[0], self.template[1]).area) 
                 verts = batch_of_maps_list[0] * scale
@@ -162,7 +165,9 @@ class PolyScope(object):
                 # (self.bb[i][0] + self.bb[i][-1])/2 - (bb[0] + bb[-1])/2 
                 verts = verts + (self.bb[i][0] + self.bb[i][-1])/2 - (bb[0] + bb[-1])/2 
                 # verts = verts - verts.mean(0, keepdims=0) + self.translations[i]
-                igl.write_obj((Path("./objs")/f"{name_source}_{name_target}.obj").as_posix(), verts, self.template[1])
+                op = (result_dir/Path("./objs")/f"{name_source}_{name_target}_normalized.obj").as_posix()
+                print(f"Writing object to {op}")
+                igl.write_triangle_mesh(op, verts, self.template[1])
             print("-- Results generated in ./results/  --")
 
 def main(source_mesh : str = "./data/source.obj",  target_mesh : str = "./data/target.obj", with_WKS=True, save_obj_to_disk=False):

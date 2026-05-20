@@ -10,6 +10,12 @@ import numpy as np
 import sys
 import random
 import time
+
+def bounding_box_diagonal(vertices):
+    bb = igl.bounding_box(vertices)[0]
+    diag = np.linalg.norm(bb[0] - bb[-1])
+    return diag
+
 class SourceMesh:
     '''
     datastructure for the source mesh to be mapped
@@ -76,7 +82,7 @@ class SourceMesh:
         self.source_vertices *= self.__random_scale
 
         bb = igl.bounding_box(self.source_vertices.numpy())[0]
-        diag = igl.bounding_box_diagonal(self.source_vertices.numpy())
+        diag = bounding_box_diagonal(self.source_vertices.numpy())
 
         # self.source_mesh_centroid = torch.mean(self.source_vertices, axis=0)
         self.source_mesh_centroid =  (bb[0] + bb[-1])/2

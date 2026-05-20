@@ -38,7 +38,14 @@ class MeshProcessor:
         self.num_samples = NUM_SAMPLES
         self.vertices = vertices.squeeze()
         self.faces = faces.squeeze()
-        self.normals =  igl.per_vertex_normals(self.vertices, self.faces)
+        if len(self.faces.shape) == 1:
+            self.faces = self.faces.reshape(1, self.faces.shape[0])
+        try:
+            self.normals =  igl.per_vertex_normals(self.vertices, self.faces)
+        except Exception as exc:
+            print('self.vertices=', type(self.vertices), self.vertices.dtype, self.vertices.shape, repr(self.vertices))
+            print('self.faces=', type(self.faces), self.faces.dtype, self.faces.shape, repr(self.faces))
+            raise
         # self.__use_wks = use_wks
         self.samples = EasyDict()
         self.samples.xyz = None
@@ -276,7 +283,7 @@ class MeshProcessor:
             st = time()
             w = WaveKernelSignature(self.vertices, self.faces, top_k_eig=50)
             w.compute()
-            print(f"Ellapsed {time() - st}")
+            # print(f"Ellapsed {time() - st}")
             wk = w.wks
             faces_wks = np.zeros((self.faces.shape[0], wk.shape[1]))
             for i in range(3):
@@ -289,7 +296,7 @@ class MeshProcessor:
 
 
     def sample_points(self, n):
-        bary, found_faces = igl.random_points_on_mesh(n, self.vertices, self.faces)
+        bary, found_faces, _ = igl.random_points_on_mesh(n, self.vertices, self.faces)
         vert_ind =  self.faces[found_faces]
         point_samples =  self.vertices[vert_ind[:,0]] * bary[:,0:1] + self.vertices[vert_ind[:,1]] * bary[:,1:2] + self.vertices[vert_ind[:,2]] * bary[:,2:3]
         normal_samples = self.normals[vert_ind[:,0]] * bary[:,0:1] + self.normals[vert_ind[:,1]] * bary[:,1:2] + self.normals[vert_ind[:,2]] * bary[:,2:3]
@@ -327,7 +334,7 @@ def sample_points(V, F, n):
 
 def _sample_point(VV, FF):
     while (True):
-        bary, found_faces = igl.random_points_on_mesh(1, VV, FF)
+        bary, found_faces, _ = igl.random_points_on_mesh(1, VV, FF)
         if (found_faces >= FF.shape[0]):
             continue
         # use to be 0.01

@@ -12,7 +12,8 @@ USE_TORCH_SPARSE = True ## This uses TORCH_SPARSE instead of TORCH.SPARSE
 
 # This four are mutually exclusive
 USE_CUPY = False  ## This uses CUPY LU decomposition on GPU
-USE_CHOLESPY_GPU = True  ## This uses cholesky decomposition on GPU
+USE_PYTORCH_GPU = True  ## This uses PyTorch's Cholesky decomposition on GPU, just a workaround
+USE_CHOLESPY_GPU = False  ## This uses cholesky decomposition on GPU
 USE_CHOLESPY_CPU = False  ## This uses cholesky decomposition on CPU
 USE_SCIPY = False ## This uses CUPY LU decomposition on CPU
 
@@ -89,7 +90,37 @@ class SparseMat:
         return sp_csc((self.vals, (self.inds[0,:], self.inds[1,:])), shape = (self.n, self.m))
 
     def to_cholesky(self):
-        return CholeskySolverD(self.n, self.inds[0,:], self.inds[1,:], self.vals, MatrixType.COO)
+        if USE_CHOLESPY_GPU:
+            return CholeskySolverD(self.n, self.inds[0,:], self.inds[1,:], self.vals, MatrixType.COO)
+        elif USE_PYTORCH_GPU:
+            # Convert sparse COO to dense matrix and use PyTorch's solve
+            A_dense = torch.sparse_coo_tensor(
+                self.inds,  # Should be (2, n_nonzero)
+                self.vals,  # Should be (n_nonzero,)
+                size=(self.n, self.n)
+            ).to_dense()
+
+            # Add small regularization for numerical stability
+            A_reg = A_dense + 1e-6 * torch.eye(self.n, device=A_dense.device, dtype=A_dense.dtype)
+
+            # Return a solver-like object that uses PyTorch's solve
+            class PyTorchSolver:
+                def __init__(self, A):
+                    self.A = A
+                    # Precompute Cholesky decomposition for faster solving
+                    try:
+                        self.L = torch.linalg.cholesky(A)
+                        self.use_cholesky = True
+                    except:
+                        self.use_cholesky = False
+                
+                def solve(self, rhs):
+                    if self.use_cholesky:
+                        return torch.cholesky_solve(rhs, self.L)
+                    else:
+                        return torch.linalg.solve(self.A, rhs)
+
+            return PyTorchSolver(A_reg)
 
     def to(self,device):
         self.vals = self.vals.to(device)
@@ -298,7 +329,7 @@ class PoissonSolver:
         self.W = self.W.to(device)
         self.sparse_grad = self.sparse_grad.to(device)
         self.sparse_rhs = self.sparse_rhs.to(device)
-        if USE_CUPY or USE_CHOLESPY_GPU:
+        if USE_CUPY or USE_CHOLESPY_GPU or USE_PYTORCH_GPU:
             self.lap = self.lap.to(device)
         return self
 
@@ -335,7 +366,7 @@ class PoissonSolver:
 
         if self.my_splu is None:
             if isinstance(self.lap,SparseMat):
-                if USE_CHOLESPY_CPU or USE_CHOLESPY_GPU:
+                if USE_CHOLESPY_CPU or USE_CHOLESPY_GPU or USE_PYTORCH_GPU:
                     self.my_splu = self.lap.to_cholesky()
                 else:
                     self.my_splu = scipy_splu(self.lap.to_coo())
@@ -527,7 +558,7 @@ class SPLUSolveLayer(torch.autograd.Function):
             # res = torch.from_numpy(sol).to(b.device)
             # # np.save("res_cpu.npy", sol)
             # print(f"time {time.time() - st}" )
-        elif USE_CHOLESPY_GPU:
+        elif USE_CHOLESPY_GPU or USE_PYTORCH_GPU:
             # torch.cuda.synchronize()
             # # st = time.time()
             # assert(b.shape[0]==1), "Need to code parrallel implem on the first dim"
@@ -543,7 +574,10 @@ class SPLUSolveLayer(torch.autograd.Function):
             c = b.permute(1,2,0).contiguous()
             c = c.view(c.shape[0], -1)
             x = torch.zeros_like(c)
-            solver.solve(c, x)
+            if USE_CHOLESPY_GPU:
+                solver.solve(c, x)
+            elif USE_PYTORCH_GPU:
+                x[:] = solver.solve(c)
             x = x.view(b.shape[1], b.shape[2], b.shape[0])
             x = x.permute(2,0,1).contiguous()
             # torch.cuda.synchronize()

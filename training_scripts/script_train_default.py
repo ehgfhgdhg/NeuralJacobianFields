@@ -16,9 +16,9 @@ class DefaultExperiment(Experiment):
 
 if __name__ == '__main__':
     sys.argv.append("--root_dir_train")
-    sys.argv.append("./data/example_training_directory")
+    sys.argv.append("./data/uv_atlas/train")
     sys.argv.append("--root_dir_test")
-    sys.argv.append("./data/example_training_directory")
+    sys.argv.append("./data/uv_atlas/test")
 
   
     sys.argv.append("--experiment_type")
@@ -28,6 +28,14 @@ if __name__ == '__main__':
     sys.argv.append("16")
     sys.argv.append("--accumulate_grad_batches")
     sys.argv.append("1")
+
+    # sys.argv.append("--random_scale")
+    # sys.argv.append("same")
+
+    sys.argv.append("--checkpoint_often")
+    sys.argv.append("--random_centering")
+    sys.argv.append("--align_2D")
+    sys.argv.append("--two_dimensional_target")
 
     exp = DefaultExperiment()
     #this parses the command line arguments and then trains on the given dataset with the given experiment

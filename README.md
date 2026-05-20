@@ -18,7 +18,7 @@ NJF is  a  general  approach. To train, you need a folder of meshes, and a list 
 ```shell
 conda create -y -n py39_njf python=3.9
 conda activate py39_njf
-pip3 install torch torchvision  --extra-index-url https://download.pytorch.org/whl/cu113
+pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu113
 conda install -y -c conda-forge igl
 pip install trimesh pytorch_lightning matplotlib easydict cholespy fire
 pip install torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-1.12.1+11.3.html
